@@ -1,0 +1,2 @@
+-I./src/bpf/headers
+-I./src/bpf/libbpf/src
