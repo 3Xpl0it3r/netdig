@@ -1,11 +1,15 @@
 #ifndef __USER_HELEPER_FUNC_H_
 #define __USER_HELEPER_FUNC_H_
 
-#include "bpf_core_read.h"
-#include "bpf_helpers.h"
 #include "vmlinux.h"
 
-#include "data_types.h"
+#include "bpf_core_read.h"
+#include "bpf_helpers.h"
+#include "bpf_tracing.h"
+
+#include "common_types.h"
+
+extern int LINUX_KERNEL_VERSION __kconfig;
 
 // this code is copied from
 // https://stackoverflow.com/questions/71212540/how-do-i-print-ip-addresses-with-bpf-trace-printk,
@@ -54,8 +58,11 @@ static __always_inline void helper_memset(void *dst, int data,
 }
 
 // 从skb里面提取五元组信息
-static __always_inline bool helper_skb_extract_5tuple(struct sk_buff *skb,
-                                                      struct tuple_t *tuple) {
+static __always_inline struct tuple_t
+helper_get_tuple_from_skb(struct sk_buff *skb) {
+
+  struct tuple_t tuple = {};
+  helper_memset(&tuple, 0, sizeof(tuple));
 
   void *skb_head = {0};
   bpf_probe_read_kernel(&skb_head, sizeof(skb_head),
@@ -71,43 +78,91 @@ static __always_inline bool helper_skb_extract_5tuple(struct sk_buff *skb,
                             offsetof(struct sk_buff, transport_header));
 
   struct iphdr *iphdr = (struct iphdr *)(skb_head + network_header);
-  u8 ip_vsn = BPF_CORE_READ_BITFIELD_PROBED(iphdr, version);
+  // u8 ip_vsn = BPF_CORE_READ_BITFIELD_PROBED(iphdr, version);
+  u16 tmp_data; // tos(8bit) version(高四位 4bit), ihl(低四位 4bit)
+  bpf_probe_read_kernel(&tmp_data, 2, (void *)iphdr);
+  u8 ip_vsn = (tmp_data & 0x00F0) >> 4;
 
   if (ip_vsn == 4) {
     struct iphdr *iphdr = (struct iphdr *)(skb_head + network_header);
-    bpf_probe_read_kernel(&tuple->s_addr, sizeof(tuple->s_addr),
+    bpf_probe_read_kernel(&tuple.s_addr, sizeof(tuple.s_addr),
                           (void *)iphdr + offsetof(struct iphdr, saddr));
-    bpf_probe_read_kernel(&tuple->d_addr, sizeof(tuple->d_addr),
+    bpf_probe_read_kernel(&tuple.d_addr, sizeof(tuple.d_addr),
                           (void *)iphdr + offsetof(struct iphdr, daddr));
-    tuple->l3_protocol = ETH_P_IP;
-    bpf_probe_read_kernel(&tuple->l4_protocol, 1,
+    tuple.l3_protocol = ETH_P_IP;
+    bpf_probe_read_kernel(&tuple.l4_protocol, 1,
                           (void *)iphdr + offsetof(struct iphdr, protocol));
   } else if (ip_vsn == 6) {
     struct ipv6hdr *ip6hdr = (struct ipv6hdr *)(skb_head + network_header);
-    tuple->l3_protocol = ETH_P_IPV6;
+    tuple.l3_protocol = ETH_P_IPV6;
     // todo
   } else {
     // other protocol ,but not tcp nor udp
-    return false;
+    goto end;
   }
 
-  if (IPPROTO_TCP == tuple->l4_protocol) {
+  if (IPPROTO_TCP == tuple.l4_protocol) {
     struct tcphdr *tcphdr = (struct tcphdr *)(skb_head + transport_header);
-    bpf_probe_read_kernel(&tuple->s_port, sizeof(tuple->s_port),
+    bpf_probe_read_kernel(&tuple.s_port, sizeof(tuple.s_port),
                           (void *)tcphdr + offsetof(struct tcphdr, source));
-    bpf_probe_read_kernel(&tuple->d_port, sizeof(tuple->d_port),
+    bpf_probe_read_kernel(&tuple.d_port, sizeof(tuple.d_port),
                           (void *)tcphdr + offsetof(struct tcphdr, dest));
-
-  } else if (IPPROTO_UDP == tuple->l4_protocol) {
+  } else if (IPPROTO_UDP == tuple.l4_protocol) {
     struct udphdr *udphdr = (struct udphdr *)(skb_head + transport_header);
-    bpf_probe_read_kernel(&tuple->d_port, sizeof(tuple->d_port),
+    bpf_probe_read_kernel(&tuple.d_port, sizeof(tuple.d_port),
                           (void *)udphdr + offsetof(struct tcphdr, dest));
-    bpf_probe_read_kernel(&tuple->d_port, sizeof(tuple->d_port),
+    bpf_probe_read_kernel(&tuple.d_port, sizeof(tuple.d_port),
                           (void *)udphdr + offsetof(struct tcphdr, dest));
-  } else {
-    return false;
   }
-  return true;
+end:
+  return tuple;
+}
+
+static __always_inline struct net_ns_meta_t
+helper_get_ns_metadata_from_skb(struct sk_buff *skb) {
+  struct net_ns_meta_t meta = {};
+  helper_memset(&meta, 0, sizeof(meta));
+  struct net_device *device;
+  struct sock *sk;
+
+  if (0 == bpf_probe_read_kernel(&device, sizeof(device),
+                                 (void *)skb + offsetof(struct sk_buff, dev))) {
+    bpf_probe_read_kernel_str(meta.device_name, sizeof(meta.device_name),
+                              (void *)device +
+                                  offsetof(struct net_device, name));
+    bpf_probe_read_kernel(&meta.ifindex, sizeof(meta.ifindex),
+                          (void *)device +
+                              offsetof(struct net_device, ifindex));
+  }
+
+  if (0 != bpf_probe_read_kernel(&sk, sizeof(sk),
+                                 (void *)skb + offsetof(struct sk_buff, sk)))
+    goto end;
+
+  struct net *possible_net; // this is struct possible_net
+
+  if (0 != bpf_probe_read_kernel(&possible_net, sizeof(possible_net),
+                                 (void *)device +
+                                     offsetof(struct net_device, nd_net)))
+    goto end;
+
+  bpf_probe_read_kernel(&meta.ns_id, sizeof(meta.ns_id),
+                        (void *)possible_net + offsetof(struct net, ns) +
+                            offsetof(struct ns_common, inum));
+
+end:
+
+  return meta;
+}
+
+static __always_inline u64 helper_get_probe_addr(struct pt_regs *ctx) {
+  if (LINUX_KERNEL_VERSION > KERNEL_VERSION(5, 15, 0))
+    return bpf_get_func_ip(ctx);
+  else {
+    // x86架构上,通过pt_regs_ip获取到的probe其始地址要不从`/proc/kmallsyms`里面的probe地址多一个字节,因此在这个地方需要减去一个字节
+    // 在其他CPU架构上会不会有这种情况暂时还不清楚
+    return PT_REGS_IP(ctx) - 1;
+  }
 }
 
 #endif

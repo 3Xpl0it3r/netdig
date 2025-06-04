@@ -6,6 +6,8 @@
 // max leghtth of  intername name
 #define IFNAMSIZ 16
 
+#define SKB_DROP_REASON_NORMAL SKB_DROP_REASON_MAX + 1
+
 //
 #define XT_FUNCTION_MAXNAMELEN 30
 #define XT_EXTENSION_MAXNAMELEN 29

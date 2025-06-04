@@ -1,6 +1,7 @@
-#include "bpf_helpers.h"
-#include "data_types.h"
 #include "vmlinux.h"
+
+#include "bpf_helpers.h"
+#include "common_types.h"
 
 #ifndef __MAPS_H_
 #define __MAPS_H_
@@ -40,6 +41,8 @@ BPF_PERF_EVENT_ARRAY(perf_netfilter_events, 4096)
 BPF_PERF_EVENT_ARRAY(perf_nfnat_events, 4096)
 
 BPF_PERF_EVENT_ARRAY(perf_route_events, 4096)
+
+BPF_PERF_EVENT_ARRAY(perf_net_l3_events, 4096)
 
 #endif // __MAPS_H_
        //

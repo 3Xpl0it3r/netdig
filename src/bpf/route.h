@@ -5,7 +5,7 @@
 #include "vmlinux.h"
 
 // map[skb, tuple]
-#include "data_types.h"
+#include "common_types.h"
 #include "maps.h"
 
 struct do_route_args {
@@ -14,12 +14,6 @@ struct do_route_args {
   __be32 saddr;
 };
 
-/* struct {
-  __uint(type, BPF_MAP_TYPE_HASH);
-  __uint(key_size, sizeof(u32));
-  __uint(value_size, sizeof(struct do_route_args));
-  __uint(max_entries, 1024);
-} map_route_buffer SEC(".maps"); */
 BPF_HASH_MAP(buffer_do_route, u32, struct do_route_args, 1024)
 
 SEC("kprobe/ip_route_input_noref")

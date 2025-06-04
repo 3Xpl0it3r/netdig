@@ -1,8 +1,8 @@
+#include "vmlinux.h"
 #include "bpf_helpers.h"
 #include "bpf_tracing.h"
-#include "vmlinux.h"
 
-#include "data_types.h"
+#include "common_types.h"
 #include "helper.h"
 #include "maps.h"
 
@@ -93,9 +93,7 @@ int kprobe__nf_nat_ipv4_manip_pkt(struct pt_regs *ctx) {
   if (config == NULL || !config->hook_nf_nat)
     return BPF_OK;
 
-  struct tuple_t origin_tuple = {};
-  helper_memset(&origin_tuple, 0, sizeof(origin_tuple));
-  helper_skb_extract_5tuple(skb, &origin_tuple);
+  struct tuple_t origin_tuple = helper_get_tuple_from_skb(skb);
 
   if (!helper_filter_tuple(&origin_tuple, config))
     return BPF_OK;
@@ -106,7 +104,7 @@ int kprobe__nf_nat_ipv4_manip_pkt(struct pt_regs *ctx) {
   helper_memset(&args, 0, sizeof(args));
   args.skb = skb;
   args.maniptype = maniptype;
-  helper_skb_extract_5tuple(skb, &args.origin);
+  args.origin = helper_get_tuple_from_skb(skb);
 
   bpf_map_update_elem(&buffer_nft_nat_args, &pid_tgid, &args, BPF_ANY);
   return BPF_OK;
@@ -122,14 +120,12 @@ int kretprobe__nf_nat_ipv4_manip_pkt(struct pt_regs *ctx) {
     return BPF_OK;
   }
 
-  struct sk_uff *skb = args->skb;
+  struct sk_buff *skb = args->skb;
   u64 skb_addr = (u64)skb;
-  struct nf_nat_event_t event = {};
+  struct net_nat_event_t event = {};
   helper_memset(&event, 0, sizeof(event));
 
-  struct tuple_t tuple = {};
-  helper_memset(&tuple, 0, sizeof(tuple));
-  helper_skb_extract_5tuple(skb, &tuple);
+  struct tuple_t tuple = helper_get_tuple_from_skb(skb);
 
   if (0 == args->maniptype) { // do_src_nat
     event.origin_addr = args->origin.s_addr;
@@ -170,9 +166,7 @@ int kprobe__nft_do_chain(struct pt_regs *ctx) {
       .chain = chain,
   };
 
-  struct tuple_t tuple = {};
-  helper_memset(&tuple, 0, sizeof(tuple));
-  helper_skb_extract_5tuple(skb, &tuple);
+  struct tuple_t tuple = helper_get_tuple_from_skb(skb);
 
   struct custom_config_t *cfg = get_config();
   if (!cfg || !cfg->hook_nf_filter || !helper_filter_tuple(&tuple, cfg))
@@ -182,7 +176,7 @@ int kprobe__nft_do_chain(struct pt_regs *ctx) {
   return BPF_OK;
 }
 
-SEC("kretprobe/nft_do_chain")
+/* SEC("kretprobe/nft_do_chain")
 int kretprobe__nft_do_chain(struct pt_regs *ctx) {
   struct args_do_nft_chain *args;
   struct nft_trace_t *trace;
@@ -202,11 +196,9 @@ int kretprobe__nft_do_chain(struct pt_regs *ctx) {
   if (!args)
     return BPF_OK;
 
-  struct tuple_t tuple = {};
-  helper_memset(&tuple, 0, sizeof(tuple));
-  helper_skb_extract_5tuple(args->skb, &tuple);
+  struct tuple_t tuple = helper_get_tuple_from_skb(skb);
 
-  struct nf_filter_event_t event = {};
+  struct net_netfilter_event_t event = {};
   helper_memset(&event, 0, sizeof(event));
   event.verdict = verdict_code;
   event.proc.pid = pid_tgid >> 32;
@@ -249,4 +241,4 @@ int kretprobe__nft_do_chain(struct pt_regs *ctx) {
                         sizeof(event));
 
   return BPF_OK;
-}
+} */

@@ -1,4 +1,3 @@
-#include "bpf_endian.h"
 #include "vmlinux.h"
 #include "constants.h"
 
@@ -7,33 +6,12 @@
 
 struct tuple_t;
 struct skb_meta_t;
-struct nf_filter_event_t;
+struct net_netfilter_event_t;
 union addr;
 
-enum trace_mask_t {
-  IP_RCV, // 0
-  IP_RCV_FINISH,
-  IP_LOCAL_DELIVER,
-  IP_LOCAL_DELIVER_FINISH,
-  TCP_V4_RCV,
-  // NETFILTER
-  IP_FORWARD,
-  IP_FORWARD_FINISH,
-
-  TCP_TRANSMIT_SKB,
-  IP_QUEUE_XMIT,
-  IP_ROUTE_OUTPUT_PORTS, // 路由
-  IP_LOCAL_OUT,
-  IP_LOCAL_OUT_FINISH,
-
-  IP_OUTPUT,
-  IP_FINISH_OUTPUT,
-
-  NEIGH_OUTPUT,
-  DEV_QUEUE_XMIT,
-
-  KFREE_SKB,
-
+enum net_flow_directive {
+  NET_DIRECTIVE_IN,
+  NET_DIRECTIVE_OUT,
 };
 
 enum nf_verdict_t {
@@ -60,6 +38,7 @@ struct proc_meta_t {
 
 struct net_ns_meta_t {
   char device_name[IFNAMSIZ];
+  int ifindex;
   unsigned int ns_id;
 };
 
@@ -74,18 +53,16 @@ struct tuple_t {
 };
 
 // sk_buffer
-struct skb_event_t {
+struct net_l3_event_t {
+  int errno;
+  u64 probe_addr;
+  u64 skb_addr;
   struct tuple_t tuple;
-  u64 start_ns;
-};
-
-// socket
-struct skt_event_t {
-  u64 start_ns;
+  struct net_ns_meta_t net_meta;
 };
 
 // netfilter metadata
-struct nf_filter_event_t {
+struct net_netfilter_event_t {
   u8 nf_hook_ops_type; // 0 ==  only print logo; 1 == xtables, 2 == Nftables  3
                        // == common
   u8 hook;
@@ -101,7 +78,7 @@ struct nf_filter_event_t {
   struct proc_meta_t proc;
 };
 
-struct nf_nat_event_t {
+struct net_nat_event_t {
   u8 manip_type;
   __be16 origin_port;
   __be16 target_port;
@@ -118,17 +95,13 @@ struct route_event_t {
   __be32 saddr;
 };
 
-struct generic_trace_event_t {
-  struct tuple_t tuple;
-  u64 trace_mask;
-};
-
 // user_opts用户态程序传进来参数
 struct custom_config_t {
   u32 addr;    // 根据原地址过滤
   __be16 port; // 原端口过滤
   bool hook_nf_nat;
   bool hook_nf_filter;
+  bool hook_net_l3;
 };
 
 #endif // end __DATA_TYPES_H_
