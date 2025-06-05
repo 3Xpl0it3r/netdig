@@ -919,6 +919,7 @@ dependencies = [
  "libc",
  "plain",
  "tokio",
+ "vmlinux",
 ]
 
 [[package]]
@@ -1446,6 +1447,11 @@ name = "utf8parse"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
+
+[[package]]
+name = "vmlinux"
+version = "0.0.0"
+source = "git+https://github.com/libbpf/vmlinux.h.git?rev=83a228cf37fc65f2d14e4896a04922b5ee531a94#83a228cf37fc65f2d14e4896a04922b5ee531a94"
 
 [[package]]
 name = "vsprintf"

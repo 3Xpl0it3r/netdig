@@ -15,4 +15,5 @@ tokio = { version = "1.45.0", features = ["full"] }
 
 [build-dependencies]
 libbpf-cargo = {git = "https://github.com/libbpf/libbpf-rs.git", branch="master"}
+vmlinux = { git = "https://github.com/libbpf/vmlinux.h.git", rev = "83a228cf37fc65f2d14e4896a04922b5ee531a94" }
 # libbpf-cargo = "0.24.8"

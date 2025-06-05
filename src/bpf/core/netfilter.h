@@ -176,14 +176,12 @@ int kprobe__nft_do_chain(struct pt_regs *ctx) {
   return BPF_OK;
 }
 
-/* SEC("kretprobe/nft_do_chain")
+SEC("kretprobe/nft_do_chain")
 int kretprobe__nft_do_chain(struct pt_regs *ctx) {
   struct args_do_nft_chain *args;
   struct nft_trace_t *trace;
   struct nft_table *table;
-  struct nf_hook_state *state;
   struct net *net;
-  struct sk_buff *skb;
 
   u32 verdict_code;
   char *name;
@@ -193,10 +191,10 @@ int kretprobe__nft_do_chain(struct pt_regs *ctx) {
 
   pid_tgid = bpf_get_current_pid_tgid();
   args = bpf_hashmap_pop(&buffer_do_nft_chain_args, &pid_tgid);
-  if (!args)
+  if (!args || !args->skb)
     return BPF_OK;
 
-  struct tuple_t tuple = helper_get_tuple_from_skb(skb);
+  struct tuple_t tuple = helper_get_tuple_from_skb(args->skb);
 
   struct net_netfilter_event_t event = {};
   helper_memset(&event, 0, sizeof(event));
@@ -219,26 +217,11 @@ int kretprobe__nft_do_chain(struct pt_regs *ctx) {
                         (void *)args->chain + offsetof(struct nft_chain, name));
   bpf_probe_read_kernel_str(&event.chain_name, sizeof(event.chain_name), name);
 
-  bpf_probe_read_kernel(&state, sizeof(state),
-                        (void *)args->pkt +
-                            offsetof(struct nft_pktinfo, state));
-  bpf_probe_read_kernel(&net, sizeof(net),
-                        (void *)state + offsetof(struct nf_hook_state, net));
-
-  // get network namespace id
-  bpf_probe_read_kernel(&event.ns_meta.ns_id, sizeof(event.ns_meta.ns_id),
-                        (void *)net + offsetof(struct net, ns) +
-                            offsetof(struct ns_common, inum));
-
-  // get device_name
-  bpf_probe_read_kernel(&name, sizeof(name),
-                        (void *)net + offsetof(struct net, loopback_dev) +
-                            offsetof(struct net_device, name));
-  bpf_probe_read_kernel_str(&event.ns_meta.device_name,
-                            sizeof(event.ns_meta.device_name), name);
+  struct net_ns_meta_t ns_meta = helper_get_ns_metadata_from_skb(args->skb);
+  event.ns_meta = ns_meta;
 
   bpf_perf_event_output(ctx, &perf_netfilter_events, BPF_F_CURRENT_CPU, &event,
                         sizeof(event));
 
   return BPF_OK;
-} */
+}

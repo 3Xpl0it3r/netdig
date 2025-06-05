@@ -32,3 +32,13 @@ pub fn get_kallsyms_by_func_addr(addr: &u64) -> String {
         None => format!("{}", addr),
     }
 }
+
+// /sys/kernel/debug/tracing/available_filter_functions
+pub fn kprobe_is_available(kprobe: &str) -> bool {
+    true
+}
+
+// sudo cat /sys/kernel/debug/tracing/available_events
+pub fn tracepoint_is_available(tp: &str) -> bool {
+    true
+}

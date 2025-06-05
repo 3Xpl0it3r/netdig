@@ -1,8 +1,6 @@
-
-#include "bpf_core_read.h"
+#include "vmlinux.h"
 #include "bpf_helpers.h"
 #include "bpf_tracing.h"
-#include "vmlinux.h"
 
 // map[skb, tuple]
 #include "common_types.h"
@@ -16,8 +14,8 @@ struct do_route_args {
 
 BPF_HASH_MAP(buffer_do_route, u32, struct do_route_args, 1024)
 
-SEC("kprobe/ip_route_input_noref")
-int kprobe__ip_route_input_noref(struct pt_regs *ctx) {
+SEC("kprobe/trace_router")
+int kprobe__trace_router(struct pt_regs *ctx) {
   struct sk_buff *skb = PT_REGS_PARM1(ctx);
   __be32 daddr = PT_REGS_PARM2(ctx);
   __be32 saddr = PT_REGS_PARM3(ctx);
@@ -34,8 +32,8 @@ int kprobe__ip_route_input_noref(struct pt_regs *ctx) {
   return BPF_OK;
 }
 
-SEC("kretprobe/ip_route_input_noref")
-int kretprobe__ip_route_input_noref(struct pt_regs *ctx) {
+SEC("kretprobe/trace_router")
+int kretprobe__trace_router(struct pt_regs *ctx) {
   int rc = PT_REGS_RET(ctx);
   u64 pid_tgid = bpf_get_current_pid_tgid();
   struct do_route_args *args = bpf_hashmap_pop(&buffer_do_route, &pid_tgid);

@@ -6,10 +6,16 @@ use libbpf_rs::{PerfBuffer, PerfBufferBuilder};
 
 use crate::netdig::NetdigSkel;
 use crate::utils;
-use crate::{comm_types, container_utils, procfs_utils};
+use crate::{comm_types, container_utils, os_utils};
 
 const KPROBES_SKB_RECORD: [&str; 1] = ["ip_rcv_core"];
-const KPROBES_SKB_PROCESSING: [&str; 3] = ["ip_rcv_finish", "ip_local_deliver", "tcp_v4_rcv"];
+// (int)(struct sk_buff *, .....)
+const KPROBES_SKB_PROG_TYPE_0: [&str; 4] = [
+    "ip_rcv_finish",
+    "ip_local_deliver",
+    "tcp_v4_rcv",
+    "nf_hook_slow",
+];
 const KPROBES_SKB_RELEASE: [&str; 2] = ["__kfree_skb", "__kfree_skb_defer"];
 
 // Copyright 2025 netdig Project Authors. Licensed under Apache-2.0.
@@ -37,11 +43,10 @@ impl NetL3Event {
             utils::cstr_to_string(&self.net_ns_info.device_name),
             self.net_ns_info.ifindex,
             self.tuple,
-            procfs_utils::get_kallsyms_by_func_addr(&self.probe_addr),
+            os_utils::get_kallsyms_by_func_addr(&self.probe_addr),
         )
     }
 }
-
 
 #[inline]
 fn handler(_cpu: i32, data: &[u8]) {
@@ -57,31 +62,38 @@ pub fn get_perf_buffer<'a>(skel: &'a NetdigSkel) -> Result<PerfBuffer<'a>> {
 }
 
 #[inline]
-pub fn ebpf_attatch_net_l3(skel: &mut NetdigSkel) -> Result<Vec<Option<libbpf_rs::Link>>> {
+pub fn ebpf_attach(skel: &mut NetdigSkel) -> Result<Vec<Option<libbpf_rs::Link>>> {
     let mut l3_links = Vec::<Option<libbpf_rs::Link>>::new();
     for kprobe in KPROBES_SKB_RECORD {
-        l3_links.push(
-            skel.progs
-                .kprobe__hook_l3_skb_srart
-                .attach_kprobe(false, kprobe)?
-                .into(),
-        );
+        if os_utils::kprobe_is_available(kprobe) {
+            l3_links.push(
+                skel.progs
+                    .kprobe__trace_l3_skb_srart
+                    .attach_kprobe(false, kprobe)?
+                    .into(),
+            );
+        }
     }
-    for kprobe in KPROBES_SKB_PROCESSING {
-        l3_links.push(
-            skel.progs
-                .kprobe__hook_l3_skb_process
-                .attach_kprobe(false, kprobe)?
-                .into(),
-        );
+    // (int)(struct sk_buff *)
+    for kprobe in KPROBES_SKB_PROG_TYPE_0 {
+        if os_utils::kprobe_is_available(kprobe) {
+            l3_links.push(
+                skel.progs
+                    .kprobe__trace_l3_skb_prog_0
+                    .attach_kprobe(false, kprobe)?
+                    .into(),
+            );
+        }
     }
     for kprobe in KPROBES_SKB_RELEASE {
-        l3_links.push(
-            skel.progs
-                .kprobe__hook_l3_skb_end
-                .attach_kprobe(false, kprobe)?
-                .into(),
-        );
+        if os_utils::kprobe_is_available(kprobe) {
+            l3_links.push(
+                skel.progs
+                    .kprobe__trace_l3_skb_end
+                    .attach_kprobe(false, kprobe)?
+                    .into(),
+            );
+        }
     }
 
     Ok(l3_links)

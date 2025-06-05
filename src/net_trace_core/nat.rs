@@ -50,7 +50,7 @@ pub fn get_perf_buffer<'a>(skel: &'a NetdigSkel) -> Result<PerfBuffer<'a>> {
         .build()?)
 }
 #[inline]
-pub fn ebpf_attach_nf_nat(skel: &mut NetdigSkel) -> Result<()> {
+pub fn ebpf_attach(skel: &mut NetdigSkel) -> Result<()> {
     skel.links.kprobe__nf_nat_ipv4_manip_pkt =
         skel.progs.kprobe__nf_nat_ipv4_manip_pkt.attach()?.into();
     skel.links.kretprobe__nf_nat_ipv4_manip_pkt =

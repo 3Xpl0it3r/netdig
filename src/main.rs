@@ -30,12 +30,11 @@ pub(crate) mod comm_types;
 pub(crate) mod config;
 pub(crate) mod constants;
 pub(crate) mod container_utils;
-pub(crate) mod nat_trace;
-pub(crate) mod net_l3_trace;
-pub(crate) mod netfilter_trace;
-pub(crate) mod procfs_utils;
-pub(crate) mod route_trace;
+pub(crate) mod os_utils;
 pub(crate) mod utils;
+
+pub(crate) mod net_trace_core;
+pub(crate) mod net_trace_l7;
 
 fn main() {
     let cli = config::Cli::parse();
@@ -64,9 +63,15 @@ fn main() {
         .update(&key.to_ne_bytes(), cfg.as_bytes(), libbpf_rs::MapFlags::ANY)
         .unwrap();
 
-    if true == cfg.hook_net_l3 {
-        let _links = net_l3_trace::ebpf_attatch_net_l3(&mut skel);
-        let perf = net_l3_trace::get_perf_buffer(&skel).unwrap();
+    if true == cfg.trace_net_l3 {
+        let _links = net_trace_core::ebpf_attach_l3(&mut skel);
+        let perf = net_trace_core::get_l3_perf_buffer(&skel).unwrap();
+        loop {
+            perf.poll(Duration::from_millis(100)).unwrap();
+        }
+    } else if true == cfg.trace_nf_filter {
+        let _links = net_trace_core::ebpf_attach_netfilter(&mut skel);
+        let perf = net_trace_core::get_netfiler_perf_buffer(&skel).unwrap();
         loop {
             perf.poll(Duration::from_millis(100)).unwrap();
         }

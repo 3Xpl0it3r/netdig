@@ -35,10 +35,10 @@ impl Into<Configuration> for Cli {
         if self.port.is_some() {
             cfg.port = htons(self.port.unwrap());
         }
-        cfg.hook_nf_nat = self.hook_net_nat;
-        cfg.hook_nf_filter = self.hook_netfilter;
+        cfg.trace_nf_nat = self.hook_net_nat;
+        cfg.trace_nf_filter = self.hook_netfilter;
         if !self.hook_net_nat && !self.hook_netfilter {
-            cfg.hook_net_l3 = true;
+            cfg.trace_net_l3 = true;
         }
         cfg
     }
@@ -50,9 +50,9 @@ impl Into<Configuration> for Cli {
 pub(crate) struct Configuration {
     pub addr: u32,
     pub port: u16,
-    pub hook_nf_nat: bool,
-    pub hook_nf_filter: bool,
-    pub hook_net_l3: bool,
+    pub trace_nf_nat: bool,
+    pub trace_nf_filter: bool,
+    pub trace_net_l3: bool,
 }
 
 impl Configuration {

@@ -1,3 +1,0 @@
-#ifndef __TRACE_HTTP_PROTOCOL_H_
-#define __TRACE_HTTP_PROTOCOL_H_
-#endif //__TRACE_HTTP_PROTOCOL_H_

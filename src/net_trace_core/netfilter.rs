@@ -42,7 +42,7 @@ impl NetFilterEvent {
     #[inline]
     fn display(self) {
         println!(
-            "{} {:<16} {}      {:<8}    {}      {} {:<32} {:<32} {}",
+            "|{:^8}|{:<16}|{}|{:<8}|{}|{}|{:<32}|{:<32}|{}|",
             chrono::offset::Local::now().format("%H:%M:%S%.3f"),
             container_utils::get_container_name_by_nsid(&(self.ns_info.ns_id as u64)),
             utils::cstr_to_string(&self.ns_info.device_name),
@@ -79,7 +79,7 @@ pub fn get_perf_buffer<'a>(skel: &'a NetdigSkel) -> Result<PerfBuffer<'a>> {
 }
 
 #[inline]
-pub fn ebpf_attach_netfilter(skel: &mut NetdigSkel) -> Result<()> {
+pub fn ebpf_attach(skel: &mut NetdigSkel) -> Result<Vec<Option<libbpf_rs::Link>>> {
     skel.links.kprobe__nft_do_chain = skel.progs.kprobe__nft_do_chain.attach()?.into();
-    Ok(())
+    Ok(vec![])
 }
