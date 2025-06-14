@@ -3,13 +3,14 @@
 
 #include "vmlinux.h"
 
-#include "bpf_core_read.h"
 #include "bpf_helpers.h"
 #include "bpf_tracing.h"
 
 #include "common_types.h"
 
-extern int LINUX_KERNEL_VERSION __kconfig;
+#ifndef KERNEL_VERSION
+#define KERNEL_VERSION(a, b, c) (((a) << 16) + ((b) << 8) + (c))
+#endif
 
 // this code is copied from
 // https://stackoverflow.com/questions/71212540/how-do-i-print-ip-addresses-with-bpf-trace-printk,
@@ -156,13 +157,13 @@ end:
 }
 
 static __always_inline u64 helper_get_probe_addr(struct pt_regs *ctx) {
-  if (LINUX_KERNEL_VERSION > KERNEL_VERSION(5, 15, 0))
-    return bpf_get_func_ip(ctx);
-  else {
-    // x86架构上,通过pt_regs_ip获取到的probe其始地址要不从`/proc/kmallsyms`里面的probe地址多一个字节,因此在这个地方需要减去一个字节
-    // 在其他CPU架构上会不会有这种情况暂时还不清楚
-    return PT_REGS_IP(ctx) - 1;
-  }
+#if LINUX_KERNEL_VERSION >= KERNEL_VERSION(5, 15, 0)
+  return bpf_get_func_ip(ctx);
+#else
+  // x86架构上,通过pt_regs_ip获取到的probe其始地址要比从`/proc/kmallsyms`里面的probe地址多一个字节,因此在这个地方需要减去一个字节
+  // 在其他CPU架构上会不会有这种情况暂时还不清楚
+  return PT_REGS_IP(ctx) - 1;
+#endif
 }
 
 #endif

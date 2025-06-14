@@ -5,6 +5,7 @@ use libbpf_rs::{PerfBuffer, PerfBufferBuilder};
 use libc::{ntohl, ntohs};
 
 use crate::netdig::NetdigSkel;
+use crate::os_utils;
 
 // Copyright 2025 netdig Project Authors. Licensed under Apache-2.0.
 #[repr(C)]
@@ -50,10 +51,15 @@ pub fn get_perf_buffer<'a>(skel: &'a NetdigSkel) -> Result<PerfBuffer<'a>> {
         .build()?)
 }
 #[inline]
-pub fn ebpf_attach(skel: &mut NetdigSkel) -> Result<()> {
-    skel.links.kprobe__nf_nat_ipv4_manip_pkt =
-        skel.progs.kprobe__nf_nat_ipv4_manip_pkt.attach()?.into();
-    skel.links.kretprobe__nf_nat_ipv4_manip_pkt =
-        skel.progs.kretprobe__nf_nat_ipv4_manip_pkt.attach()?.into();
-    Ok(())
+pub fn ebpf_attach(
+    skel: &mut NetdigSkel,
+    kernel_probes: os_utils::AllAvailableKernelProbes,
+) -> Result<Vec<Option<libbpf_rs::Link>>> {
+    let mut links = Vec::<Option<libbpf_rs::Link>>::new();
+    if kernel_probes.kprobe_is_available("nf_nat_ipv4_manip_pkt") {
+        links.push(skel.progs.kprobe__nf_nat_ipv4_manip_pkt.attach()?.into());
+        links.push(skel.progs.kretprobe__nf_nat_ipv4_manip_pkt.attach()?.into());
+    }
+
+    Ok(links)
 }

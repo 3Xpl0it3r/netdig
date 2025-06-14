@@ -1,9 +1,7 @@
 use libc::{htonl, htons};
-use std::net::{self, Ipv4Addr};
+use std::net::Ipv4Addr;
 use std::slice;
 use std::str::FromStr;
-
-use anyhow::{anyhow, Result};
 
 // Copyright 2025 netdig Project Authors. Licensed under Apache-2.0.
 #[derive(clap::Parser)]
@@ -21,6 +19,8 @@ pub(crate) struct Cli {
     hook_netfilter: bool,
     #[arg(long = "skb_trace", group = "hook")]
     hook_net_l3: bool,
+    #[arg(long = "route", group = "hook")]
+    hook_net_route: bool,
 }
 
 impl Into<Configuration> for Cli {
@@ -37,6 +37,7 @@ impl Into<Configuration> for Cli {
         }
         cfg.trace_nf_nat = self.hook_net_nat;
         cfg.trace_nf_filter = self.hook_netfilter;
+        cfg.trace_net_route = self.hook_net_route;
         if !self.hook_net_nat && !self.hook_netfilter {
             cfg.trace_net_l3 = true;
         }
@@ -53,23 +54,10 @@ pub(crate) struct Configuration {
     pub trace_nf_nat: bool,
     pub trace_nf_filter: bool,
     pub trace_net_l3: bool,
+    pub trace_net_route: bool,
 }
 
 impl Configuration {
-    #[inline]
-    pub fn set_port(&mut self, port: u16) {
-        self.port = libc::htons(port)
-    }
-    #[inline]
-    pub fn get_port(&self) -> u16 {
-        libc::ntohs(self.port)
-    }
-    #[inline]
-    pub fn set_v4_addr(&mut self, ip_str: &str) -> Result<()> {
-        let s_addr: u32 = net::Ipv4Addr::from_str(ip_str)?.into();
-        self.addr = s_addr.to_be();
-        Ok(())
-    }
     #[inline]
     pub fn as_bytes(&self) -> &[u8] {
         let bptr = self as *const _ as *const u8;

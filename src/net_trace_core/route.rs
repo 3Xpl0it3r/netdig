@@ -1,6 +1,4 @@
-use std::vec;
-
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use libbpf_rs::{PerfBuffer, PerfBufferBuilder};
 
 use crate::netdig::NetdigSkel;
@@ -46,23 +44,13 @@ pub fn get_perf_buffer<'a>(skel: &'a NetdigSkel) -> Result<PerfBuffer<'a>> {
 }
 
 #[inline]
-pub fn ebpf_attach(skel: &mut NetdigSkel) -> Result<Vec<Option<libbpf_rs::Link>>> {
+pub fn ebpf_attach(skel: &mut NetdigSkel, kernel_probes: os_utils::AllAvailableKernelProbes) -> Result<Vec<Option<libbpf_rs::Link>>> {
     let kprobes = ["ip_route_input_noref"];
     let mut links = Vec::new();
     for kprobe in kprobes {
-        if os_utils::kprobe_is_available(kprobe) {
-            links.push(
-                skel.progs
-                    .kprobe__trace_router
-                    .attach_kprobe(false, kprobe)?
-                    .into(),
-            );
-            links.push(
-                skel.progs
-                    .kretprobe__trace_router
-                    .attach_kprobe(true, kprobe)?
-                    .into(),
-            );
+        if kernel_probes.kprobe_is_available(kprobe){
+            links.push( skel.progs .kprobe__trace_router .attach_kprobe(false, kprobe)? .into(),);
+            links.push( skel.progs .kretprobe__trace_router .attach_kprobe(true, kprobe)? .into(),);
         }
     }
     Ok(links)

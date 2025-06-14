@@ -1,14 +1,19 @@
-use anyhow::{anyhow, Result};
-use std::ffi::CStr;
-use std::fmt;
+use anyhow::Result;
 
 use libbpf_rs::{PerfBuffer, PerfBufferBuilder};
 
 use crate::netdig::NetdigSkel;
 use crate::utils;
-use crate::{comm_types, container_utils, os_utils};
+use crate::os_utils;
+use crate::container_utils;
+use crate::comm_types;
 
+#[cfg(kernel_le_4_19)]
+const KPROBES_SKB_RECORD: [&str; 1] = ["ip_rcv"];
+
+#[cfg(kernel_gt_4_19)]
 const KPROBES_SKB_RECORD: [&str; 1] = ["ip_rcv_core"];
+
 // (int)(struct sk_buff *, .....)
 const KPROBES_SKB_PROG_TYPE_0: [&str; 4] = [
     "ip_rcv_finish",
@@ -62,39 +67,24 @@ pub fn get_perf_buffer<'a>(skel: &'a NetdigSkel) -> Result<PerfBuffer<'a>> {
 }
 
 #[inline]
-pub fn ebpf_attach(skel: &mut NetdigSkel) -> Result<Vec<Option<libbpf_rs::Link>>> {
-    let mut l3_links = Vec::<Option<libbpf_rs::Link>>::new();
+pub fn ebpf_attach(skel: &mut NetdigSkel, kernel_probes: os_utils::AllAvailableKernelProbes) -> Result<Vec<Option<libbpf_rs::Link>>> {
+    let mut links = Vec::<Option<libbpf_rs::Link>>::new();
     for kprobe in KPROBES_SKB_RECORD {
-        if os_utils::kprobe_is_available(kprobe) {
-            l3_links.push(
-                skel.progs
-                    .kprobe__trace_l3_skb_srart
-                    .attach_kprobe(false, kprobe)?
-                    .into(),
-            );
+        if kernel_probes.kprobe_is_available(kprobe){
+            links.push( skel.progs .kprobe__trace_l3_skb_srart .attach_kprobe(false, kprobe)? .into(),);
         }
     }
     // (int)(struct sk_buff *)
     for kprobe in KPROBES_SKB_PROG_TYPE_0 {
-        if os_utils::kprobe_is_available(kprobe) {
-            l3_links.push(
-                skel.progs
-                    .kprobe__trace_l3_skb_prog_0
-                    .attach_kprobe(false, kprobe)?
-                    .into(),
-            );
+        if kernel_probes.kprobe_is_available(kprobe){
+            links.push( skel.progs .kprobe__trace_l3_skb_prog_0 .attach_kprobe(false, kprobe)? .into(),);
         }
     }
     for kprobe in KPROBES_SKB_RELEASE {
-        if os_utils::kprobe_is_available(kprobe) {
-            l3_links.push(
-                skel.progs
-                    .kprobe__trace_l3_skb_end
-                    .attach_kprobe(false, kprobe)?
-                    .into(),
-            );
+        if kernel_probes.kprobe_is_available(kprobe){
+            links.push( skel.progs .kprobe__trace_l3_skb_end .attach_kprobe(false, kprobe)? .into(),);
         }
     }
 
-    Ok(l3_links)
+    Ok(links)
 }

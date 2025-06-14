@@ -1,19 +1,18 @@
-use std::cell::{Cell, LazyCell, RefCell};
 use std::collections::HashMap;
 use std::fs;
 use std::os::unix::fs::MetadataExt;
-use std::sync::{Arc, LazyLock};
+use std::sync::LazyLock;
 
 use bollard::Docker;
 use tokio::runtime::Runtime;
 
 // Some constants about cri paths
-const DEFAULT_CRI_RUNTIME_ENDPOINTS: [&'static str; 3] = [
+const _DEFAULT_CRI_RUNTIME_ENDPOINTS: [&'static str; 3] = [
     "unix:///run/containerd/containerd.sock",
     "unix:///run/crio/crio.sock",
     "unix:///var/run/cri-dockerd.sock",
 ];
-const DEFAULT_DOCKER_ENDPOINT: &'static str = "unix:///var/run/docker.sock";
+const _DEFAULT_DOCKER_ENDPOINT: &'static str = "unix:///var/run/docker.sock";
 
 // Store the id of network namespace <-> container name mapping
 static CONTAINER_NETNS_CACHE: LazyLock<HashMap<u64, String>> =

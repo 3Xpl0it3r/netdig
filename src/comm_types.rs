@@ -1,17 +1,10 @@
-use std::collections::HashMap;
-use std::ffi::CStr;
 use std::fmt;
 use std::net::Ipv4Addr;
-use std::os::raw::c_char;
 
-use anyhow::Result;
 use libc::{ntohl, ntohs};
 
 use crate::constants;
 
-// Copyright 2025 netdig Project Authors. Licensed under Apache-2.0.
-pub type Kallsyms = HashMap<u64, String>;
-pub type ContainerNetnsMaps = HashMap<u64, String>;
 
 // 进程相关信息
 #[repr(C)]
@@ -42,21 +35,6 @@ impl fmt::Display for Tuple {
             Ipv4Addr::from(ntohl(self.d_addr)),
             ntohs(self.d_port)
         )
-    }
-}
-
-impl Tuple {
-    pub fn source_addr(&self) -> String {
-        Ipv4Addr::from(ntohl(self.s_addr)).to_string()
-    }
-    pub fn dest_addr(&self) -> String {
-        Ipv4Addr::from(ntohl(self.d_addr)).to_string()
-    }
-    pub fn source_port(&self) -> u16 {
-        ntohs(self.s_port)
-    }
-    pub fn dest_port(&self) -> u16 {
-        ntohs(self.d_port)
     }
 }
 

@@ -1,14 +1,11 @@
 use libbpf_rs::{PerfBuffer, PerfBufferBuilder};
-use libc::{ntohl, ntohs};
-use std::fmt;
-use std::net::Ipv4Addr;
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 
-use crate::constants;
 use crate::container_utils;
 use crate::netdig::NetdigSkel;
 use crate::{comm_types, utils};
+use crate::{constants, os_utils};
 
 const NF_HOOK_VERDICT: [&str; 8] = [
     "NF_DROP",
@@ -79,7 +76,13 @@ pub fn get_perf_buffer<'a>(skel: &'a NetdigSkel) -> Result<PerfBuffer<'a>> {
 }
 
 #[inline]
-pub fn ebpf_attach(skel: &mut NetdigSkel) -> Result<Vec<Option<libbpf_rs::Link>>> {
-    skel.links.kprobe__nft_do_chain = skel.progs.kprobe__nft_do_chain.attach()?.into();
-    Ok(vec![])
+pub fn ebpf_attach(
+    skel: &mut NetdigSkel,
+    kernel_probes: os_utils::AllAvailableKernelProbes,
+) -> Result<Vec<Option<libbpf_rs::Link>>> {
+    let mut links = Vec::<Option<libbpf_rs::Link>>::new();
+    if kernel_probes.kprobe_is_available("nft_do_chain") {
+        links.push(skel.progs.kprobe__nft_do_chain.attach()?.into());
+    }
+    Ok(links)
 }

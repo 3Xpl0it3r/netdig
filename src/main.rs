@@ -1,21 +1,14 @@
-use std::collections::HashMap;
-use std::fs::File;
-use std::io::BufRead;
-use std::mem::MaybeUninit;
-use std::sync::LazyLock;
+use std::ffi::CString;
+use std::mem::{self, MaybeUninit};
+use std::ptr;
 use std::time::Duration;
 
-use anyhow::{anyhow, Result};
-use chrono::offset::MappedLocalTime;
-use chrono::prelude::*;
-use tokio::runtime::Runtime;
-
-use bollard::Docker;
 use clap::Parser;
-use libbpf_rs::skel::{OpenSkel, Skel, SkelBuilder};
-use libbpf_rs::{MapCore, PerfBuffer, PerfBufferBuilder};
-use libc::{c_char, htonl, htons, ntohl, ntohs};
-use plain::Plain;
+use libbpf_rs::{
+    libbpf_sys,
+    skel::{OpenSkel, SkelBuilder},
+    MapCore,
+};
 
 mod netdig {
     include!(concat!(
@@ -36,6 +29,19 @@ pub(crate) mod utils;
 pub(crate) mod net_trace_core;
 pub(crate) mod net_trace_l7;
 
+fn build_custom_btf_open_opt(btf_custom_path: &str) -> libbpf_sys::bpf_object_open_opts {
+    let _path = CString::new(btf_custom_path).unwrap();
+    let cus_btf_fd: *const ::std::os::raw::c_char = _path.into_raw();
+
+    let mut opts = libbpf_sys::bpf_object_open_opts {
+        sz: mem::size_of::<libbpf_sys::bpf_object_open_opts>() as libbpf_sys::size_t,
+        ..Default::default()
+    };
+
+    opts.btf_custom_path = cus_btf_fd;
+    opts
+}
+
 fn main() {
     let cli = config::Cli::parse();
     let cfg: config::Configuration = cli.into();
@@ -49,10 +55,26 @@ fn main() {
         println!("remove limit on locked memory failed, ret is {}", ret);
     }
 
-    let mut skel_builder = NetdigSkelBuilder::default();
+    let skel_builder = NetdigSkelBuilder::default();
     // set constants
     let mut open_project = MaybeUninit::uninit();
-    let open_skel = skel_builder.open(&mut open_project).unwrap();
+
+    let open_skel = if os_utils::os_support_btf() {
+        skel_builder.open(&mut open_project).unwrap()
+    } else {
+        // bpf/btfhub_archive/<os_id>/<version_id>/<arch>/<kernel_version.btf>
+        let os_release = os_utils::OsRelease::default();
+        let btf_custom_path = format!(
+            "src/bpf/btfhub_archive/{}/{}/{}/{}.btf",
+            os_release.id, os_release.version_id, os_release.arch, os_release.kernel_version
+        );
+        skel_builder
+            .open_opts(
+                build_custom_btf_open_opt(&btf_custom_path),
+                &mut open_project,
+            )
+            .unwrap()
+    };
     // load ebpf code into kernel
     let mut skel = open_skel.load().unwrap();
 
@@ -63,17 +85,31 @@ fn main() {
         .update(&key.to_ne_bytes(), cfg.as_bytes(), libbpf_rs::MapFlags::ANY)
         .unwrap();
 
-    if true == cfg.trace_net_l3 {
-        let _links = net_trace_core::ebpf_attach_l3(&mut skel);
-        let perf = net_trace_core::get_l3_perf_buffer(&skel).unwrap();
-        loop {
-            perf.poll(Duration::from_millis(100)).unwrap();
-        }
-    } else if true == cfg.trace_nf_filter {
-        let _links = net_trace_core::ebpf_attach_netfilter(&mut skel);
-        let perf = net_trace_core::get_netfiler_perf_buffer(&skel).unwrap();
-        loop {
-            perf.poll(Duration::from_millis(100)).unwrap();
-        }
+    let kernel_probes = os_utils::AllAvailableKernelProbes::default();
+
+    let (_links, perf) = if true == cfg.trace_nf_filter {
+        (
+            net_trace_core::ebpf_attach_netfilter(&mut skel, kernel_probes).unwrap(),
+            net_trace_core::get_netfiler_perf_buffer(&skel).unwrap(),
+        )
+    } else if true == cfg.trace_nf_nat {
+        (
+            net_trace_core::ebpf_attach_nat(&mut skel, kernel_probes).unwrap(),
+            net_trace_core::get_nat_perf_bufer(&skel).unwrap(),
+        )
+    } else if true == cfg.trace_net_route {
+        (
+            net_trace_core::ebpf_attach_route(&mut skel, kernel_probes).unwrap(),
+            net_trace_core::get_route_perf_buffer(&skel).unwrap(),
+        )
+    } else {
+        (
+            net_trace_core::ebpf_attach_l3(&mut skel, kernel_probes).unwrap(),
+            net_trace_core::get_l3_perf_buffer(&skel).unwrap(),
+        )
+    };
+
+    loop {
+        perf.poll(Duration::from_millis(100)).unwrap();
     }
 }
