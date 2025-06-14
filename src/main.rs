@@ -1,6 +1,5 @@
 use std::ffi::CString;
 use std::mem::{self, MaybeUninit};
-use std::ptr;
 use std::time::Duration;
 
 use clap::Parser;

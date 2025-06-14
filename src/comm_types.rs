@@ -5,7 +5,6 @@ use libc::{ntohl, ntohs};
 
 use crate::constants;
 
-
 // 进程相关信息
 #[repr(C)]
 pub struct ProcessInfo {

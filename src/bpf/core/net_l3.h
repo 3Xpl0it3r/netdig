@@ -8,7 +8,19 @@
 #include "helper.h"
 #include "cus_error.h"
 
+// sk_buffer
+struct net_l3_event_t {
+  int errno;
+  u64 probe_addr;
+  u64 skb_addr;
+  struct tuple_t tuple;
+  struct net_ns_meta_t net_meta;
+  struct process_info_t process_info;
+};
+
 BPF_HASH_MAP(buffer_skb_lifetime_trace, u64, u8, 4096);
+
+BPF_PERF_EVENT_ARRAY(perf_net_l3_events, 4096)
 
 static __always_inline void report_net_l3_event(struct pt_regs *ctx,
                                                 struct sk_buff *skb) {
@@ -33,6 +45,7 @@ static __always_inline void report_net_l3_event(struct pt_regs *ctx,
   event.skb_addr = (u64)skb;
   event.errno =
       (struct sk_buff *)PT_REGS_RET(ctx) == NULL ? L3_ERR_FAILED : L3_ERR_OK;
+  event.process_info = helper_get_process_info();
   bpf_perf_event_output(ctx, &perf_net_l3_events, BPF_F_CURRENT_CPU, &event,
                         sizeof(event));
 }
@@ -57,6 +70,7 @@ int kprobe__trace_l3_skb_srart(struct pt_regs *ctx) {
   event.net_meta = helper_get_ns_metadata_from_skb(skb);
   event.errno =
       (struct sk_buff *)PT_REGS_RET(ctx) == NULL ? L3_ERR_FAILED : L3_ERR_OK;
+  event.process_info = helper_get_process_info();
   bpf_perf_event_output(ctx, &perf_net_l3_events, BPF_F_CURRENT_CPU, &event,
                         sizeof(event));
   return BPF_OK;

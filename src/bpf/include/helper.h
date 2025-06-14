@@ -166,4 +166,13 @@ static __always_inline u64 helper_get_probe_addr(struct pt_regs *ctx) {
 #endif
 }
 
+static __always_inline struct process_info_t helper_get_process_info() {
+  struct process_info_t process = {};
+  u32 pid = bpf_get_current_pid_tgid() >> 32;
+  process.pid = pid;
+  if (bpf_get_current_comm(process.comm, sizeof(process.comm)))
+    process.comm[0] = 0;
+  return process;
+}
+
 #endif

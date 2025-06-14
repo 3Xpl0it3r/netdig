@@ -36,13 +36,8 @@ static __always_inline struct custom_config_t *get_config() {
   return config;
 }
 
-BPF_PERF_EVENT_ARRAY(perf_netfilter_events, 4096)
 
-BPF_PERF_EVENT_ARRAY(perf_nfnat_events, 4096)
 
-BPF_PERF_EVENT_ARRAY(perf_route_events, 4096)
-
-BPF_PERF_EVENT_ARRAY(perf_net_l3_events, 4096)
 
 #endif // __MAPS_H_
        //

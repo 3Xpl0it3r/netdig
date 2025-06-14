@@ -6,6 +6,14 @@
 #include "common_types.h"
 #include "maps.h"
 
+struct route_event_t {
+  int ret_stus;
+  __be32 daddr;
+  __be32 saddr;
+};
+
+BPF_PERF_EVENT_ARRAY(perf_route_events, 4096)
+
 struct do_route_args {
   struct sk_buff *skb;
   __be32 daadr;
@@ -13,6 +21,7 @@ struct do_route_args {
 };
 
 BPF_HASH_MAP(buffer_do_route, u32, struct do_route_args, 1024)
+
 
 SEC("kprobe/trace_router")
 int kprobe__trace_router(struct pt_regs *ctx) {

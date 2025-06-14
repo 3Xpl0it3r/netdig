@@ -26,7 +26,6 @@ fn init_container_ns() -> HashMap<u64, String> {
     let rt = Runtime::new().unwrap();
 
     rt.block_on(async {
-
         let docker = Docker::connect_with_local_defaults().unwrap();
         let containers: Vec<String> = docker
             .list_containers::<String>(None)

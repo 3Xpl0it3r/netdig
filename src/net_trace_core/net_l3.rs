@@ -2,11 +2,11 @@ use anyhow::Result;
 
 use libbpf_rs::{PerfBuffer, PerfBufferBuilder};
 
-use crate::netdig::NetdigSkel;
-use crate::utils;
-use crate::os_utils;
-use crate::container_utils;
 use crate::comm_types;
+use crate::container_utils;
+use crate::netdig::NetdigSkel;
+use crate::os_utils;
+use crate::utils;
 
 #[cfg(kernel_le_4_19)]
 const KPROBES_SKB_RECORD: [&str; 1] = ["ip_rcv"];
@@ -31,6 +31,7 @@ struct NetL3Event {
     skb_addr: u64,
     tuple: comm_types::Tuple,
     net_ns_info: comm_types::NetNsInfo,
+    process_info: comm_types::ProcessInfo,
 }
 
 impl NetL3Event {
@@ -41,12 +42,15 @@ impl NetL3Event {
 
 impl NetL3Event {
     fn display(self) {
+        // skbaddr netns ifidx  pid prog tuple  function
         println!(
-            "|{:#10x}|{:^12}|{:>8}:({:<02})|{}|{:^16}|",
+            "|{:#10x}|{:^12}|{:>8}:({:<02})|{:^6}|{:^12}|{}|{:^16}|",
             self.skb_addr,
             container_utils::get_container_name_by_nsid(&(self.net_ns_info.ns_id as u64)),
             utils::cstr_to_string(&self.net_ns_info.device_name),
             self.net_ns_info.ifindex,
+            self.process_info.pid,
+            utils::cstr_to_string(&self.process_info.comm),
             self.tuple,
             os_utils::get_kallsyms_by_func_addr(&self.probe_addr),
         )
@@ -67,22 +71,40 @@ pub fn get_perf_buffer<'a>(skel: &'a NetdigSkel) -> Result<PerfBuffer<'a>> {
 }
 
 #[inline]
-pub fn ebpf_attach(skel: &mut NetdigSkel, kernel_probes: os_utils::AllAvailableKernelProbes) -> Result<Vec<Option<libbpf_rs::Link>>> {
+pub fn ebpf_attach(
+    skel: &mut NetdigSkel,
+    kernel_probes: os_utils::AllAvailableKernelProbes,
+) -> Result<Vec<Option<libbpf_rs::Link>>> {
     let mut links = Vec::<Option<libbpf_rs::Link>>::new();
     for kprobe in KPROBES_SKB_RECORD {
-        if kernel_probes.kprobe_is_available(kprobe){
-            links.push( skel.progs .kprobe__trace_l3_skb_srart .attach_kprobe(false, kprobe)? .into(),);
+        if kernel_probes.kprobe_is_available(kprobe) {
+            links.push(
+                skel.progs
+                    .kprobe__trace_l3_skb_srart
+                    .attach_kprobe(false, kprobe)?
+                    .into(),
+            );
         }
     }
     // (int)(struct sk_buff *)
     for kprobe in KPROBES_SKB_PROG_TYPE_0 {
-        if kernel_probes.kprobe_is_available(kprobe){
-            links.push( skel.progs .kprobe__trace_l3_skb_prog_0 .attach_kprobe(false, kprobe)? .into(),);
+        if kernel_probes.kprobe_is_available(kprobe) {
+            links.push(
+                skel.progs
+                    .kprobe__trace_l3_skb_prog_0
+                    .attach_kprobe(false, kprobe)?
+                    .into(),
+            );
         }
     }
     for kprobe in KPROBES_SKB_RELEASE {
-        if kernel_probes.kprobe_is_available(kprobe){
-            links.push( skel.progs .kprobe__trace_l3_skb_end .attach_kprobe(false, kprobe)? .into(),);
+        if kernel_probes.kprobe_is_available(kprobe) {
+            links.push(
+                skel.progs
+                    .kprobe__trace_l3_skb_end
+                    .attach_kprobe(false, kprobe)?
+                    .into(),
+            );
         }
     }
 
