@@ -24,3 +24,4 @@ target/
 
 src/bpf/*.skel.rs
 src/bpf/*.o
+src/bpf/libbpf/
