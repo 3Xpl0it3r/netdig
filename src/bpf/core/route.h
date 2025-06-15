@@ -3,8 +3,8 @@
 #include "bpf_tracing.h"
 
 // map[skb, tuple]
-#include "common_types.h"
-#include "maps.h"
+#include "include/common_types.h"
+#include "include/maps.h"
 
 struct route_event_t {
   int ret_stus;
@@ -12,7 +12,7 @@ struct route_event_t {
   __be32 saddr;
 };
 
-BPF_PERF_EVENT_ARRAY(perf_route_events, 4096)
+BPF_PERF_EVENT_ARRAY(perf_event_net_route_map, 4096)
 
 struct do_route_args {
   struct sk_buff *skb;
@@ -25,7 +25,7 @@ BPF_HASH_MAP(buffer_do_route, u32, struct do_route_args, 1024)
 
 SEC("kprobe/trace_router")
 int kprobe__trace_router(struct pt_regs *ctx) {
-  struct sk_buff *skb = PT_REGS_PARM1(ctx);
+  struct sk_buff *skb = (struct sk_buff*)PT_REGS_PARM1(ctx);
   __be32 daddr = PT_REGS_PARM2(ctx);
   __be32 saddr = PT_REGS_PARM3(ctx);
 
@@ -56,7 +56,7 @@ int kretprobe__trace_router(struct pt_regs *ctx) {
       .saddr = args->saddr,
   };
 
-  bpf_perf_event_output(ctx, &perf_route_events, BPF_F_CURRENT_CPU, &event,
+  bpf_perf_event_output(ctx, &perf_event_net_route_map, BPF_F_CURRENT_CPU, &event,
                         sizeof(event));
 
   return BPF_OK;

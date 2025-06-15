@@ -4,6 +4,7 @@ use anyhow::Result;
 
 use crate::container_utils;
 use crate::netdig::NetdigSkel;
+use crate::trace::Tracer;
 use crate::{comm_types, utils};
 use crate::{constants, os_utils};
 
@@ -20,7 +21,7 @@ const NF_HOOK_VERDICT: [&str; 8] = [
 // Netfilter nat event
 
 #[repr(C)]
-struct NetFilterEvent {
+struct Event {
     nf_hook_ops_type: u8,
     hook: u8,
     num_hook_entries: u16,
@@ -35,7 +36,7 @@ struct NetFilterEvent {
     proc_info: comm_types::ProcessInfo,
 }
 
-impl NetFilterEvent {
+impl Event {
     #[inline]
     fn display(self) {
         println!(
@@ -55,34 +56,57 @@ impl NetFilterEvent {
 
 /* "TIME", "NET_NS_NAME", "IF_NAME", "PID", "COMM", "PKT_INFO", "TABLE", "CHAIN", "VERDICT" */
 
-impl NetFilterEvent {
+impl Event {
     #[inline]
     fn load(data: &[u8]) -> Self {
         return unsafe { std::ptr::read(data.as_ptr() as *const Self) };
     }
-}
-
-#[inline]
-fn handler(_cpu: i32, data: &[u8]) {
-    let event: NetFilterEvent = NetFilterEvent::load(data);
-    event.display();
-}
-
-#[inline]
-pub fn get_perf_buffer<'a>(skel: &'a NetdigSkel) -> Result<PerfBuffer<'a>> {
-    Ok(PerfBufferBuilder::new(&skel.maps.perf_netfilter_events)
-        .sample_cb(handler)
-        .build()?)
-}
-
-#[inline]
-pub fn ebpf_attach(
-    skel: &mut NetdigSkel,
-    kernel_probes: os_utils::AllAvailableKernelProbes,
-) -> Result<Vec<Option<libbpf_rs::Link>>> {
-    let mut links = Vec::<Option<libbpf_rs::Link>>::new();
-    if kernel_probes.kprobe_is_available("nft_do_chain") {
-        links.push(skel.progs.kprobe__nft_do_chain.attach()?.into());
+    #[inline]
+    fn handler(_cpu: i32, data: &[u8]) {
+        let event: Event = Event::load(data);
+        event.display();
     }
-    Ok(links)
+}
+
+pub struct NetNetfilterTracer<'pb> {
+    _links: Vec<Option<libbpf_rs::Link>>,
+    perf_buffer: Option<PerfBuffer<'pb>>,
+}
+
+// Tracer[#TODO] (should add some comments)
+impl<'pb> Tracer for NetNetfilterTracer<'pb> {
+    fn new() -> Self
+    where
+        Self: Sized,
+    {
+        Self {
+            _links: Vec::new(),
+            perf_buffer: None,
+        }
+    }
+
+    fn attach_map(&mut self, skel: &NetdigSkel) -> Result<()> {
+        let perf_buffer = PerfBufferBuilder::new(&skel.maps.perf_event_net_netfilter_map)
+            .sample_cb(Event::handler)
+            .build()?;
+        self.perf_buffer = Some(perf_buffer);
+        Ok(())
+    }
+
+    fn attach_probe(
+        &mut self,
+        skel: &mut NetdigSkel,
+        kernel_probes: os_utils::KernelProbes,
+    ) -> Result<()> {
+        if kernel_probes.kprobe_is_available("nft_do_chain") {
+            self._links
+                .push(skel.progs.kprobe__nft_do_chain.attach()?.into());
+        }
+        Ok(())
+    }
+
+    fn poll(&self, duration: std::time::Duration) -> Result<()> {
+        self.perf_buffer.as_ref().unwrap().poll(duration).unwrap();
+        Ok(())
+    }
 }

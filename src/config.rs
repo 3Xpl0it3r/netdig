@@ -3,6 +3,8 @@ use std::net::Ipv4Addr;
 use std::slice;
 use std::str::FromStr;
 
+use crate::trace::TracerKind;
+
 // Copyright 2025 netdig Project Authors. Licensed under Apache-2.0.
 #[derive(clap::Parser)]
 #[command(name = "netdig")]
@@ -21,6 +23,8 @@ pub(crate) struct Cli {
     hook_net_l3: bool,
     #[arg(long = "route", group = "hook")]
     hook_net_route: bool,
+    #[arg(long = "http", group = "hook")]
+    hook_l7_http: bool,
 }
 
 impl Into<Configuration> for Cli {
@@ -38,6 +42,9 @@ impl Into<Configuration> for Cli {
         cfg.trace_nf_nat = self.hook_net_nat;
         cfg.trace_nf_filter = self.hook_netfilter;
         cfg.trace_net_route = self.hook_net_route;
+
+        cfg.trace_l7_http = self.hook_l7_http;
+
         if !self.hook_net_nat && !self.hook_netfilter {
             cfg.trace_net_l3 = true;
         }
@@ -55,6 +62,7 @@ pub(crate) struct Configuration {
     pub trace_nf_filter: bool,
     pub trace_net_l3: bool,
     pub trace_net_route: bool,
+    pub trace_l7_http: bool,
 }
 
 impl Configuration {
@@ -63,5 +71,19 @@ impl Configuration {
         let bptr = self as *const _ as *const u8;
         let bsize = std::mem::size_of_val(self);
         unsafe { slice::from_raw_parts(bptr, bsize) }
+    }
+
+    pub fn as_trace_kind(&self) -> TracerKind {
+        if self.trace_nf_nat {
+            TracerKind::CoreTraceNat
+        } else if self.trace_nf_filter {
+            TracerKind::CoreTraceNetfilter
+        } else if self.trace_net_route {
+            TracerKind::CoreTraceRoute
+        } else if self.trace_l7_http {
+            TracerKind::L7TraceHttp
+        } else {
+            TracerKind::CoreTraceNetL3
+        }
     }
 }

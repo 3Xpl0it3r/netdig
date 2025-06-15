@@ -1,6 +1,6 @@
 use std::ffi::CString;
 use std::mem::{self, MaybeUninit};
-use std::time::Duration;
+use std::time;
 
 use clap::Parser;
 use libbpf_rs::{
@@ -25,8 +25,7 @@ pub(crate) mod container_utils;
 pub(crate) mod os_utils;
 pub(crate) mod utils;
 
-pub(crate) mod net_trace_core;
-pub(crate) mod net_trace_l7;
+pub(crate) mod trace;
 
 fn build_custom_btf_open_opt(btf_custom_path: &str) -> libbpf_sys::bpf_object_open_opts {
     let _path = CString::new(btf_custom_path).unwrap();
@@ -84,31 +83,14 @@ fn main() {
         .update(&key.to_ne_bytes(), cfg.as_bytes(), libbpf_rs::MapFlags::ANY)
         .unwrap();
 
-    let kernel_probes = os_utils::AllAvailableKernelProbes::default();
+    let kernel_probes = os_utils::KernelProbes::default();
 
-    let (_links, perf) = if true == cfg.trace_nf_filter {
-        (
-            net_trace_core::ebpf_attach_netfilter(&mut skel, kernel_probes).unwrap(),
-            net_trace_core::get_netfiler_perf_buffer(&skel).unwrap(),
-        )
-    } else if true == cfg.trace_nf_nat {
-        (
-            net_trace_core::ebpf_attach_nat(&mut skel, kernel_probes).unwrap(),
-            net_trace_core::get_nat_perf_bufer(&skel).unwrap(),
-        )
-    } else if true == cfg.trace_net_route {
-        (
-            net_trace_core::ebpf_attach_route(&mut skel, kernel_probes).unwrap(),
-            net_trace_core::get_route_perf_buffer(&skel).unwrap(),
-        )
-    } else {
-        (
-            net_trace_core::ebpf_attach_l3(&mut skel, kernel_probes).unwrap(),
-            net_trace_core::get_l3_perf_buffer(&skel).unwrap(),
-        )
-    };
-
+    let mut tracer = trace::build_tracker(cfg.as_trace_kind());
+    // 关联perf event maps
+    tracer.attach_map(&skel).unwrap();
+    // 关联kprobes
+    tracer.attach_probe(&mut skel, kernel_probes).unwrap();
     loop {
-        perf.poll(Duration::from_millis(100)).unwrap();
+        tracer.poll(time::Duration::from_millis(100));
     }
 }

@@ -37,24 +37,24 @@ pub fn get_kallsyms_by_func_addr(addr: &u64) -> String {
     }
 }
 
-pub struct AllAvailableKernelProbes {
+pub struct KernelProbes {
     kprobes: HashMap<String, bool>,
     tracepoints: HashMap<String, bool>,
 }
 
 // Default[#TODO] (should add some comments)
-impl Default for AllAvailableKernelProbes {
+impl Default for KernelProbes {
     fn default() -> Self {
         let kprobes = get_all_kprobes().unwrap_or(HashMap::new());
         let tracepoints = get_all_tracepoints().unwrap_or(HashMap::new());
-        AllAvailableKernelProbes {
+        KernelProbes {
             kprobes,
             tracepoints,
         }
     }
 }
 
-impl AllAvailableKernelProbes {
+impl KernelProbes {
     #[inline]
     pub fn kprobe_is_available(&self, kprobe: &str) -> bool {
         match self.kprobes.get(kprobe) {

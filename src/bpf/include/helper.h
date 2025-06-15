@@ -1,12 +1,10 @@
-#ifndef __USER_HELEPER_FUNC_H_
-#define __USER_HELEPER_FUNC_H_
-
 #include "vmlinux.h"
-
 #include "bpf_helpers.h"
 #include "bpf_tracing.h"
-
 #include "common_types.h"
+
+#ifndef __USER_HELEPER_FUNC_H_
+#define __USER_HELEPER_FUNC_H_
 
 #ifndef KERNEL_VERSION
 #define KERNEL_VERSION(a, b, c) (((a) << 16) + ((b) << 8) + (c))

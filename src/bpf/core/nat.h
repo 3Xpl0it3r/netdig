@@ -2,10 +2,9 @@
 #include "bpf_helpers.h"
 #include "bpf_tracing.h"
 
-#include "common_types.h"
-#include "helper.h"
-#include "maps.h"
-
+#include "include/common_types.h"
+#include "include/helper.h"
+#include "include/maps.h"
 
 struct net_nat_event_t {
   u8 manip_type;
@@ -18,16 +17,15 @@ struct net_nat_event_t {
   struct net_ns_meta_t ns_meta;
 };
 
-BPF_PERF_EVENT_ARRAY(perf_nfnat_events, 4096)
+BPF_PERF_EVENT_ARRAY(perf_event_net_nat_map, 4096)
 
-
-struct args_nf_nat {
+struct net_nat_trace_args {
   struct sk_buff *skb;
   struct tuple_t origin;
   u32 maniptype;
 };
 
-BPF_HASH_MAP(buffer_nft_nat_args, u32, struct args_nf_nat, 1024)
+BPF_HASH_MAP(net_nat_trace_buffer, u32, struct net_nat_trace_args, 1024)
 
 SEC("kprobe/nf_nat_ipv4_manip_pkt")
 int kprobe__nf_nat_ipv4_manip_pkt(struct pt_regs *ctx) {
@@ -46,13 +44,13 @@ int kprobe__nf_nat_ipv4_manip_pkt(struct pt_regs *ctx) {
 
   // prepare argument
   u64 pid_tgid = bpf_get_current_pid_tgid();
-  struct args_nf_nat args = {};
+  struct net_nat_trace_args args = {};
   helper_memset(&args, 0, sizeof(args));
   args.skb = skb;
   args.maniptype = maniptype;
   args.origin = helper_get_tuple_from_skb(skb);
 
-  bpf_map_update_elem(&buffer_nft_nat_args, &pid_tgid, &args, BPF_ANY);
+  bpf_map_update_elem(&net_nat_trace_buffer, &pid_tgid, &args, BPF_ANY);
   return BPF_OK;
 }
 
@@ -61,7 +59,8 @@ int kretprobe__nf_nat_ipv4_manip_pkt(struct pt_regs *ctx) {
   bool ret_stus = PT_REGS_RET(ctx);
   u64 pid_tgid = bpf_get_current_pid_tgid();
 
-  struct args_nf_nat *args = bpf_hashmap_pop(&buffer_nft_nat_args, &pid_tgid);
+  struct net_nat_trace_args *args =
+      bpf_hashmap_pop(&net_nat_trace_buffer, &pid_tgid);
   if (!args || !ret_stus) {
     return BPF_OK;
   }
@@ -89,9 +88,8 @@ int kretprobe__nf_nat_ipv4_manip_pkt(struct pt_regs *ctx) {
   event.rc = ret_stus;
   event.manip_type = args->maniptype;
 
-  bpf_perf_event_output(ctx, &perf_nfnat_events, BPF_F_CURRENT_CPU, &event,
+  bpf_perf_event_output(ctx, &perf_event_net_nat_map, BPF_F_CURRENT_CPU, &event,
                         sizeof(event));
 
   return BPF_OK;
 }
-

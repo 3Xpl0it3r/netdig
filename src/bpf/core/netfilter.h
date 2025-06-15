@@ -2,10 +2,9 @@
 #include "bpf_helpers.h"
 #include "bpf_tracing.h"
 
-#include "common_types.h"
-#include "helper.h"
-#include "maps.h"
-
+#include "include/common_types.h"
+#include "include/helper.h"
+#include "include/maps.h"
 
 // netfilter metadata
 struct net_netfilter_event_t {
@@ -24,16 +23,16 @@ struct net_netfilter_event_t {
   struct process_info_t proc;
 };
 
-BPF_PERF_EVENT_ARRAY(perf_netfilter_events, 4096)
+BPF_PERF_EVENT_ARRAY(perf_event_net_netfilter_map, 4096)
 
-
-struct args_do_nft_chain {
+struct netfilter_nft_trace_args {
   struct sk_buff *skb;
   struct nft_pktinfo *pkt;
   struct nft_chain *chain;
 };
 
-BPF_HASH_MAP(buffer_do_nft_chain_args, u32, struct args_do_nft_chain, 1024)
+BPF_HASH_MAP(netfilter_nft_trace_buffer, u32, struct netfilter_nft_trace_args,
+             1024)
 // nft_pktinfo 在vmlinux里面没有暴露出来
 struct nft_pktinfo {
   struct sk_buff *skb;
@@ -86,7 +85,6 @@ struct nft_chain {
   struct _dymmy_nft_rule *rules_next;
 };
 
-
 // nftables
 SEC("kprobe/nft_do_chain")
 int kprobe__nft_do_chain(struct pt_regs *ctx) {
@@ -98,7 +96,7 @@ int kprobe__nft_do_chain(struct pt_regs *ctx) {
 
   bpf_probe_read_kernel(&skb, sizeof(skb),
                         (void *)pkt + offsetof(struct nft_pktinfo, skb));
-  struct args_do_nft_chain args = {
+  struct netfilter_nft_trace_args args = {
       .skb = skb,
       .pkt = pkt,
       .chain = chain,
@@ -109,14 +107,14 @@ int kprobe__nft_do_chain(struct pt_regs *ctx) {
   struct custom_config_t *cfg = get_config();
   if (!cfg || !cfg->hook_nf_filter || !helper_filter_tuple(&tuple, cfg))
     return BPF_OK;
-  bpf_map_update_elem(&buffer_do_nft_chain_args, &pid_tgid, &args, BPF_ANY);
+  bpf_map_update_elem(&netfilter_nft_trace_buffer, &pid_tgid, &args, BPF_ANY);
 
   return BPF_OK;
 }
 
 SEC("kretprobe/nft_do_chain")
 int kretprobe__nft_do_chain(struct pt_regs *ctx) {
-  struct args_do_nft_chain *args;
+  struct netfilter_nft_trace_args *args;
   struct nft_trace_t *trace;
   struct nft_table *table;
   struct net *net;
@@ -128,7 +126,7 @@ int kretprobe__nft_do_chain(struct pt_regs *ctx) {
   verdict_code = PT_REGS_RC(ctx);
 
   pid_tgid = bpf_get_current_pid_tgid();
-  args = bpf_hashmap_pop(&buffer_do_nft_chain_args, &pid_tgid);
+  args = bpf_hashmap_pop(&netfilter_nft_trace_buffer, &pid_tgid);
   if (!args || !args->skb)
     return BPF_OK;
 
@@ -158,8 +156,8 @@ int kretprobe__nft_do_chain(struct pt_regs *ctx) {
   struct net_ns_meta_t ns_meta = helper_get_ns_metadata_from_skb(args->skb);
   event.ns_meta = ns_meta;
 
-  bpf_perf_event_output(ctx, &perf_netfilter_events, BPF_F_CURRENT_CPU, &event,
-                        sizeof(event));
+  bpf_perf_event_output(ctx, &perf_event_net_netfilter_map, BPF_F_CURRENT_CPU,
+                        &event, sizeof(event));
 
   return BPF_OK;
 }

@@ -59,9 +59,9 @@ fn main() {
     skeleton_builder.source(SRC);
     let mut build_args = vec![
         OsStr::new("-I").to_owned(),
-        PathBuf::from("src/bpf/libbpf/src").as_os_str().to_owned(),
+        PathBuf::from("src/bpf/").as_os_str().to_owned(),
         OsStr::new("-I").to_owned(),
-        PathBuf::from("src/bpf/include").as_os_str().to_owned(),
+        PathBuf::from("src/bpf/libbpf/src").as_os_str().to_owned(),
     ];
 
     if os_support_btf() {
